@@ -48,9 +48,8 @@ jobs:
           --disable-avdevice
           --disable-postproc
           --disable-network
-          --disable-symver
           --disable-debug
-          --disable-tests
+          --disable-symver
 
           --enable-avcodec
           --enable-avformat
@@ -90,14 +89,12 @@ jobs:
               --extra-ldflags="-Wl,-z,max-page-size=16384" \
               $COMMON_FLAGS
 
-            make -j$(nproc)
+            # 🔥 المهم: نبني فقط المكتبات
+            make -j$(nproc) all
             make install
           }
 
-          # armeabi-v7a
           build_arch arm armv7a armv7a-linux-androideabi
-
-          # arm64-v8a
           build_arch aarch64 aarch64 aarch64-linux-android
 
       - name: Prepare jniLibs
