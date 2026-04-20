@@ -1,83 +1,43 @@
-#!/bin/bash
-set -e
+name: Build FFmpeg AAR
 
-# ========== إعدادات ==========
-API=21
-NDK=$ANDROID_NDK_HOME
-TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
+on:
+  workflow_dispatch:
 
-FFMPEG_DIR=$(pwd)/FFmpeg
-BUILD_DIR=$(pwd)/build
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-mkdir -p $BUILD_DIR
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
 
-# ========== فلاغز مخصصة (تصغير الحجم) ==========
-COMMON_FLAGS="
---disable-everything
---enable-small
---enable-shared
---disable-static
---disable-doc
---disable-programs
---disable-avdevice
---disable-postproc
---disable-network
+      - name: 🧰 Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git wget unzip yasm pkg-config
 
---enable-avcodec
---enable-avformat
---enable-avfilter
---enable-swresample
+      - name: 📦 Install Android NDK
+        run: |
+          wget https://dl.google.com/android/repository/android-ndk-r26d-linux.zip
+          unzip android-ndk-r26d-linux.zip
+          echo "ANDROID_NDK_HOME=$PWD/android-ndk-r26d" >> $GITHUB_ENV
 
-# decoders / encoders
---enable-decoder=mp3,aac
---enable-encoder=mp3,aac
+      - name: 📥 Clone FFmpeg 4.4
+        run: |
+          git clone https://github.com/FFmpeg/FFmpeg.git
+          cd FFmpeg
+          git checkout n4.4
 
-# filters (حسب استخدامك)
---enable-filter=volume
---enable-filter=apulsator
---enable-filter=atrim
---enable-filter=concat
---enable-filter=amix
---enable-filter=adelay
-"
+      - name: ⚙️ Give permission to build script
+        run: chmod +x build.sh
 
-# ========== دالة البناء ==========
-build_ffmpeg () {
+      - name: 🔨 Build FFmpeg
+        run: |
+          export ANDROID_NDK_HOME=$ANDROID_NDK_HOME
+          ./build.sh
 
-  ARCH=$1
-  CPU=$2
-  TARGET=$3
-
-  PREFIX=$BUILD_DIR/$TARGET
-
-  echo "🔥 Building for $TARGET ..."
-
-  cd $FFMPEG_DIR
-  make clean || true
-
-  ./configure \
-    --prefix=$PREFIX \
-    --target-os=android \
-    --arch=$ARCH \
-    --cpu=$CPU \
-    --enable-cross-compile \
-    --sysroot=$TOOLCHAIN/sysroot \
-    --cc=$TOOLCHAIN/bin/${TARGET}${API}-clang \
-    --cxx=$TOOLCHAIN/bin/${TARGET}${API}-clang++ \
-    --ld=$TOOLCHAIN/bin/ld \
-    --strip=$TOOLCHAIN/bin/llvm-strip \
-    --extra-cflags="-Os -fPIC" \
-    --extra-ldflags="-Wl,-z,max-page-size=16384" \
-    $COMMON_FLAGS
-
-  make -j$(nproc)
-  make install
-
-  echo "✅ Done $TARGET"
-}
-
-# ========== بناء المعماريات ==========
-build_ffmpeg arm armv7a armv7a-linux-androideabi
-build_ffmpeg aarch64 aarch64 aarch64-linux-android
-
-echo "🎉 BUILD FINISHED"
+      - name: 📤 Upload .so files
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-so
+          path: build/
