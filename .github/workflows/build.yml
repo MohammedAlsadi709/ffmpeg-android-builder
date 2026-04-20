@@ -1,4 +1,4 @@
-name: Build FFmpeg AAR
+name: Build FFmpeg SO
 
 on:
   workflow_dispatch:
@@ -28,16 +28,84 @@ jobs:
           cd FFmpeg
           git checkout n4.4
 
-      - name: ⚙️ Give permission to build script
-        run: chmod +x build.sh
-
-      - name: 🔨 Build FFmpeg
+      - name: 🔨 Build FFmpeg (armv7 + arm64)
         run: |
-          export ANDROID_NDK_HOME=$ANDROID_NDK_HOME
-          ./build.sh
+          set -e
 
-      - name: 📤 Upload .so files
+          API=21
+          NDK=$ANDROID_NDK_HOME
+          TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
+
+          cd FFmpeg
+
+          COMMON_FLAGS="
+          --disable-everything
+          --enable-small
+          --enable-shared
+          --disable-static
+          --disable-doc
+          --disable-programs
+          --disable-avdevice
+          --disable-postproc
+          --disable-network
+
+          --enable-avcodec
+          --enable-avformat
+          --enable-avfilter
+          --enable-swresample
+
+          --enable-decoder=mp3,aac
+          --enable-encoder=mp3,aac
+
+          --enable-filter=volume
+          --enable-filter=apulsator
+          --enable-filter=atrim
+          --enable-filter=concat
+          --enable-filter=amix
+          --enable-filter=adelay
+          "
+
+          build_arch () {
+            ARCH=$1
+            CPU=$2
+            TARGET=$3
+            PREFIX=$(pwd)/../build/$TARGET
+
+            make clean || true
+
+            ./configure \
+              --prefix=$PREFIX \
+              --target-os=android \
+              --arch=$ARCH \
+              --cpu=$CPU \
+              --enable-cross-compile \
+              --sysroot=$TOOLCHAIN/sysroot \
+              --cc=$TOOLCHAIN/bin/${TARGET}${API}-clang \
+              --cxx=$TOOLCHAIN/bin/${TARGET}${API}-clang++ \
+              --ld=$TOOLCHAIN/bin/ld \
+              --strip=$TOOLCHAIN/bin/llvm-strip \
+              --extra-cflags="-Os -fPIC" \
+              --extra-ldflags="-Wl,-z,max-page-size=16384" \
+              $COMMON_FLAGS
+
+            make -j$(nproc)
+            make install
+          }
+
+          # build both architectures
+          build_arch arm armv7a armv7a-linux-androideabi
+          build_arch aarch64 aarch64 aarch64-linux-android
+
+      - name: 📦 Rename ABI folders (Android format)
+        run: |
+          mkdir -p jniLibs/armeabi-v7a
+          mkdir -p jniLibs/arm64-v8a
+
+          cp -r build/armv7a-linux-androideabi/lib/* jniLibs/armeabi-v7a/
+          cp -r build/aarch64-linux-android/lib/* jniLibs/arm64-v8a/
+
+      - name: 📤 Upload result
         uses: actions/upload-artifact@v4
         with:
-          name: ffmpeg-so
-          path: build/
+          name: ffmpeg-libs
+          path: jniLibs/
