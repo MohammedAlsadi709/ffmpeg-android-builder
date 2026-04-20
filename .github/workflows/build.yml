@@ -8,27 +8,27 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 🧰 Install tools
+      - name: Install tools
         run: |
           sudo apt-get update
           sudo apt-get install -y git wget unzip yasm pkg-config
 
-      - name: 📦 Install Android NDK
+      - name: Install Android NDK
         run: |
           wget https://dl.google.com/android/repository/android-ndk-r26d-linux.zip
           unzip android-ndk-r26d-linux.zip
           echo "ANDROID_NDK_HOME=$PWD/android-ndk-r26d" >> $GITHUB_ENV
 
-      - name: 📥 Clone FFmpeg 4.4
+      - name: Clone FFmpeg 4.4
         run: |
           git clone https://github.com/FFmpeg/FFmpeg.git
           cd FFmpeg
           git checkout n4.4
 
-      - name: 🔨 Build FFmpeg (armv7 + arm64)
+      - name: Build FFmpeg
         run: |
           set -e
 
@@ -48,6 +48,9 @@ jobs:
           --disable-avdevice
           --disable-postproc
           --disable-network
+          --disable-symver
+          --disable-debug
+          --disable-tests
 
           --enable-avcodec
           --enable-avformat
@@ -71,7 +74,7 @@ jobs:
             TARGET=$3
             PREFIX=$(pwd)/../build/$TARGET
 
-            make clean || true
+            make distclean || true
 
             ./configure \
               --prefix=$PREFIX \
@@ -82,7 +85,6 @@ jobs:
               --sysroot=$TOOLCHAIN/sysroot \
               --cc=$TOOLCHAIN/bin/${TARGET}${API}-clang \
               --cxx=$TOOLCHAIN/bin/${TARGET}${API}-clang++ \
-              --ld=$TOOLCHAIN/bin/ld \
               --strip=$TOOLCHAIN/bin/llvm-strip \
               --extra-cflags="-Os -fPIC" \
               --extra-ldflags="-Wl,-z,max-page-size=16384" \
@@ -92,19 +94,21 @@ jobs:
             make install
           }
 
-          # build both architectures
+          # armeabi-v7a
           build_arch arm armv7a armv7a-linux-androideabi
+
+          # arm64-v8a
           build_arch aarch64 aarch64 aarch64-linux-android
 
-      - name: 📦 Rename ABI folders (Android format)
+      - name: Prepare jniLibs
         run: |
           mkdir -p jniLibs/armeabi-v7a
           mkdir -p jniLibs/arm64-v8a
 
-          cp -r build/armv7a-linux-androideabi/lib/* jniLibs/armeabi-v7a/
-          cp -r build/aarch64-linux-android/lib/* jniLibs/arm64-v8a/
+          cp -r build/armv7a-linux-androideabi/lib/*.so jniLibs/armeabi-v7a/
+          cp -r build/aarch64-linux-android/lib/*.so jniLibs/arm64-v8a/
 
-      - name: 📤 Upload result
+      - name: Upload result
         uses: actions/upload-artifact@v4
         with:
           name: ffmpeg-libs
