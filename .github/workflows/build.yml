@@ -1,27 +1,23 @@
 #!/bin/bash
-
 set -e
 
 API=21
 NDK=$ANDROID_NDK_HOME
 TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
 
-build() {
-  ARCH=$1
-  TARGET=$2
-
-  PREFIX=$(pwd)/output/$ARCH
+build_armv7() {
+  PREFIX=$(pwd)/output/armeabi-v7a
 
   cd ffmpeg
-
   make distclean || true
 
   ./configure \
     --prefix=$PREFIX \
     --target-os=android \
-    --arch=$ARCH \
-    --cc=$TOOLCHAIN/bin/${TARGET}${API}-clang \
-    --cxx=$TOOLCHAIN/bin/${TARGET}${API}-clang++ \
+    --arch=arm \
+    --cpu=armv7-a \
+    --cc=$TOOLCHAIN/bin/armv7a-linux-androideabi${API}-clang \
+    --cxx=$TOOLCHAIN/bin/armv7a-linux-androideabi${API}-clang++ \
     --enable-cross-compile \
     --enable-shared \
     --disable-static \
@@ -45,21 +41,61 @@ build() {
     \
     --enable-protocol=file \
     \
-    --enable-small \
+    --extra-cflags="-Os -fPIC" \
+    --extra-ldflags="-Wl,-z,max-page-size=16384"
+
+  make -j$(nproc)
+  make install
+  cd ..
+}
+
+build_arm64() {
+  PREFIX=$(pwd)/output/arm64-v8a
+
+  cd ffmpeg
+  make distclean || true
+
+  ./configure \
+    --prefix=$PREFIX \
+    --target-os=android \
+    --arch=aarch64 \
+    --cc=$TOOLCHAIN/bin/aarch64-linux-android${API}-clang \
+    --cxx=$TOOLCHAIN/bin/aarch64-linux-android${API}-clang++ \
+    --enable-cross-compile \
+    --enable-shared \
+    --disable-static \
+    --disable-programs \
+    --disable-doc \
+    --disable-everything \
+    \
+    --enable-avcodec \
+    --enable-avformat \
+    --enable-avfilter \
+    --enable-swresample \
+    \
+    --enable-filter=volume \
+    --enable-filter=apulsator \
+    --enable-filter=concat \
+    --enable-filter=atrim \
+    --enable-filter=amix \
+    \
+    --enable-decoder=mp3 \
+    --enable-encoder=mp3 \
+    \
+    --enable-protocol=file \
     \
     --extra-cflags="-Os -fPIC" \
     --extra-ldflags="-Wl,-z,max-page-size=16384"
 
   make -j$(nproc)
   make install
-
   cd ..
 }
 
-# ARM64
-build arm64-v8a aarch64-linux-android
+echo "🔨 Building armeabi-v7a..."
+build_armv7
 
-# ARMv7
-build armeabi-v7a armv7a-linux-androideabi
+echo "🔨 Building arm64-v8a..."
+build_arm64
 
-echo "✅ Build finished for all ABIs"
+echo "✅ DONE — both ABIs built"
