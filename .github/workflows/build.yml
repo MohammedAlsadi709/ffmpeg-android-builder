@@ -16,11 +16,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git wget unzip yasm pkg-config
 
-      - name: Install Android NDK
+      - name: Install Android NDK r21e
         run: |
-          wget https://dl.google.com/android/repository/android-ndk-r26d-linux.zip
-          unzip android-ndk-r26d-linux.zip
-          echo "ANDROID_NDK_HOME=$PWD/android-ndk-r26d" >> $GITHUB_ENV
+          wget https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
+          unzip android-ndk-r21e-linux-x86_64.zip
+          echo "ANDROID_NDK_HOME=$PWD/android-ndk-r21e" >> $GITHUB_ENV
+          echo "$PWD/android-ndk-r21e/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
+
+      - name: Verify NDK
+        run: |
+          echo "NDK PATH = $ANDROID_NDK_HOME"
+          ls $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin | grep clang
 
       - name: Clone FFmpeg 4.4
         run: |
@@ -75,6 +81,8 @@ jobs:
 
             make distclean || true
 
+            echo "Using compiler: $TOOLCHAIN/bin/${TARGET}${API}-clang"
+
             ./configure \
               --prefix=$PREFIX \
               --target-os=android \
@@ -89,12 +97,14 @@ jobs:
               --extra-ldflags="-Wl,-z,max-page-size=16384" \
               $COMMON_FLAGS
 
-            # 🔥 المهم: نبني فقط المكتبات
-            make -j$(nproc) all
+            make -j$(nproc)
             make install
           }
 
+          # armeabi-v7a
           build_arch arm armv7a armv7a-linux-androideabi
+
+          # arm64-v8a
           build_arch aarch64 aarch64 aarch64-linux-android
 
       - name: Prepare jniLibs
